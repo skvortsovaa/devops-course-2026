@@ -118,3 +118,63 @@ bash scripts/deploy.sh
 5. Защиту закрытого ключа TLS.
 
 Проверки выполняются скриптом `scripts/audit.sh`.
+
+## 9. Контейнеризация
+
+### Установка Docker
+
+На виртуальной машине Ubuntu 24.04 установлен Docker Engine из официального репозитория Docker и плагин Docker Compose.
+
+Проверка установки: docker version, docker compose version, sudo systemctl status docker.
+
+Пользователь devops входит в группу docker и выполняет команды Docker без sudo.
+
+### Размещение приложения
+
+Исходные файлы находятся в каталоге app/ репозитория.
+На виртуальной машине приложение размещено в /home/devops/app/.
+
+Доставка файлов выполняется через rsync с параметрами -avz --delete --exclude=.env.
+
+### Переменные окружения
+
+Шаблон переменных: app/.env.example.
+Рабочий файл: /home/devops/app/.env.
+
+Файл .env содержит параметры PostgreSQL и пароль, не отслеживается Git и имеет права доступа 600.
+
+### Docker Compose
+
+Конфигурация: app/docker-compose.yml.
+
+Сервис app — Flask-приложение на Python 3.12 с Gunicorn.
+Сервис db — PostgreSQL 16 Alpine.
+
+Контейнеры используют внутреннюю сеть app_backend.
+Приложение запускается после перехода PostgreSQL в состояние healthy.
+
+Запуск: docker compose up -d --build.
+Проверка: docker compose ps.
+Остановка: docker compose down.
+
+### Порты и постоянное хранилище
+
+Порт приложения опубликован только на 127.0.0.1:5000.
+Порт PostgreSQL 5432 наружу не опубликован.
+
+Данные PostgreSQL хранятся в томе app_db_data.
+
+Команда docker compose down сохраняет данные.
+Команда docker compose down -v удаляет том вместе с данными.
+
+### Обратный прокси Nginx
+
+Nginx принимает HTTPS-запросы по адресу https://devops.local/app/ и перенаправляет их на http://127.0.0.1:5000/.
+
+Конфигурация: /etc/nginx/sites-available/devops-site.
+
+Проверка приложения:
+curl --cacert ~/devops.crt https://devops.local/app/
+curl --cacert ~/devops.crt https://devops.local/app/health
+
+При остановке контейнера приложения Nginx возвращает 502 Bad Gateway.
